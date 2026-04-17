@@ -8,71 +8,125 @@
 
 <style>
 body {
-  font-family: Arial;
-  background: #141a0e;
-  color: #fff;
+  margin:0;
+  font-family:'DM Sans';
+  background:#141a0e;
+  color:#f0ede6;
 }
+
+nav {
+  background:#1c2413;
+  padding:10px 20px;
+  display:flex;
+  gap:12px;
+}
+nav a {
+  color:#aaa;
+  text-decoration:none;
+}
+nav a.active {
+  color:#d4af37;
+}
+
+.layout {
+  display:flex;
+}
+
+.left {
+  width:65%;
+  padding:20px;
+}
+
+.right {
+  width:35%;
+  background:#1c2413;
+  padding:20px;
+  border-left:1px solid #333;
+}
+
+.card {
+  background:#232e18;
+  padding:10px;
+  margin-bottom:10px;
+  border-radius:8px;
+}
+
 button {
-  padding: 6px;
-  background: #d4af37;
-  border: none;
+  background:#d4af37;
+  border:none;
+  padding:6px 10px;
+  cursor:pointer;
 }
-input {
-  padding: 6px;
+
+input, select {
+  width:100%;
+  padding:8px;
+  margin-bottom:8px;
+  background:#232e18;
+  border:1px solid #333;
+  color:#fff;
+}
+
+.prod-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:10px;
+}
+
+.total {
+  font-size:22px;
+  margin:10px 0;
 }
 </style>
 </head>
 
 <body>
 
-<!-- KEEP YOUR NAV + LAYOUT SAME -->
+<nav>
+  <a href="index.html">Dashboard</a>
+  <a href="pos.html" class="active">POS</a>
+  <a href="products.html">Products</a>
+  <a href="sales.html">Sales</a>
+  <a href="pl.html">P&L</a>
+  <a href="customers.html">Customers</a>
+</nav>
 
 <div class="layout">
 
-  <!-- LEFT SIDE (UNCHANGED) -->
-  <div class="left">
-    <div class="section-title">Select product & size</div>
-    <input class="search-bar" id="search" placeholder="Search..." oninput="renderProducts()">
-    <div class="prod-grid" id="prodGrid"></div>
-  </div>
+<div class="left">
+<h3>Select Product</h3>
+<input id="search" placeholder="Search..." oninput="renderProducts()">
 
-  <!-- RIGHT SIDE -->
-  <div class="right">
+<div id="products" class="prod-grid"></div>
+</div>
 
-    <div class="cart-title">Cart</div>
-    <div id="cartItems"></div>
+<div class="right">
 
-    <div class="cart-total">
-      <span>Total</span>
-      <span class="amount" id="cartTotal">$0.00</span>
-    </div>
+<h3>Cart</h3>
+<div id="cart"></div>
 
-    <select id="payMethod" class="pay-select">
-      <option value="cash">Cash</option>
-      <option value="card">Card</option>
-      <option value="transfer">Transfer</option>
-    </select>
+<div class="total">Total: $<span id="total">0</span></div>
 
-    <button id="btnSale" class="btn-sale" onclick="completeSale()">Complete Sale</button>
-    <button class="btn-clear" onclick="clearCart()">Clear cart</button>
+<select id="payMethod">
+<option value="cash">Cash</option>
+<option value="card">Card</option>
+<option value="transfer">Transfer</option>
+</select>
 
-    <!-- ✅ EXPENSE SECTION -->
-    <div style="margin-top:20px;border-top:1px solid #333;padding-top:15px">
+<button onclick="checkout()">Complete Sale</button>
+<button onclick="clearCart()">Clear Cart</button>
 
-      <div style="font-size:11px;color:#aaa;margin-bottom:8px">
-        Add Expense
-      </div>
+<hr>
 
-      <input id="etitle" placeholder="Expense (Rent, Ads...)">
-      <input id="eamount" type="number" placeholder="Amount">
+<h4>Add Expense</h4>
 
-      <button onclick="addExpense()">Add Expense</button>
+<input id="etitle" placeholder="Expense name">
+<input id="eamount" type="number" placeholder="Amount">
 
-    </div>
+<button onclick="addExpense()">Add Expense</button>
 
-    <div id="msg"></div>
+</div>
 
-  </div>
 </div>
 
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -81,57 +135,66 @@ input {
 <script>
 
 const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-const $ = id => document.getElementById(id);
 
-let allProducts = [], allInventory = [], cart = [];
+let products = [];
+let cart = [];
 
-// LOAD DATA
-async function loadData() {
-  const { data: p } = await client.from("products").select("*");
-  const { data: i } = await client.from("inventory").select("*");
-
-  allProducts = p || [];
-  allInventory = i || [];
+// LOAD PRODUCTS
+async function load(){
+  const {data} = await client.from("products").select("*");
+  products = data || [];
   renderProducts();
 }
 
-// PRODUCTS
-function renderProducts() {
-  $("prodGrid").innerHTML = allProducts.map(p => `
-    <div>
-      ${p.name} - $${p.selling_price}
-      <button onclick="addToCart('${p.id}','${p.name}',${p.selling_price})">Add</button>
-    </div>
-  `).join("");
+// RENDER PRODUCTS
+function renderProducts(){
+  const q = document.getElementById("search").value.toLowerCase();
+
+  document.getElementById("products").innerHTML = products
+    .filter(p => p.name.toLowerCase().includes(q))
+    .map(p => `
+      <div class="card">
+        ${p.name}<br>
+        $${p.selling_price}
+        <button onclick="add('${p.id}','${p.name}',${p.selling_price})">Add</button>
+      </div>
+    `).join("");
 }
 
-// CART
-function addToCart(id,name,price){
+// ADD TO CART
+function add(id,name,price){
   const item = cart.find(x=>x.id===id);
   if(item) item.qty++;
   else cart.push({id,name,price,qty:1});
   renderCart();
 }
 
+// RENDER CART
 function renderCart(){
-  $("cartItems").innerHTML = cart.map(i=>`
-    <div>${i.name} x${i.qty}</div>
+  document.getElementById("cart").innerHTML = cart.map(i=>`
+    <div>${i.name} x${i.qty} = $${i.qty*i.price}</div>
   `).join("");
 
   const total = cart.reduce((s,x)=>s+x.qty*x.price,0);
-  $("cartTotal").innerText = "$"+total;
+  document.getElementById("total").innerText = total;
 }
 
-function clearCart(){ cart=[]; renderCart(); }
+// CLEAR CART
+function clearCart(){
+  cart=[];
+  renderCart();
+}
 
-// SALE
-async function completeSale(){
+// CHECKOUT
+async function checkout(){
   const total = cart.reduce((s,x)=>s+x.qty*x.price,0);
 
-  const { data:sale } = await client.from("sales").insert([{
+  const {data:sale,error} = await client.from("sales").insert([{
     total,
-    payment_method: $("payMethod").value
+    payment_method: document.getElementById("payMethod").value
   }]).select().single();
+
+  if(error) return alert(error.message);
 
   await client.from("sale_items").insert(
     cart.map(i=>({
@@ -142,35 +205,29 @@ async function completeSale(){
     }))
   );
 
-  alert("Sale done");
+  alert("Sale complete");
   cart=[];
   renderCart();
 }
 
-// ✅ EXPENSE FUNCTION (ALREADY INCLUDED)
+// ADD EXPENSE
 async function addExpense(){
-  const title = $("etitle").value;
-  const amount = Number($("eamount").value);
+  const title = document.getElementById("etitle").value;
+  const amount = Number(document.getElementById("eamount").value);
 
-  if(!title || !amount){
-    return alert("Enter expense");
-  }
+  if(!title || !amount) return alert("Enter expense");
 
-  const { error } = await client.from("expenses").insert([{
-    title,
-    amount
-  }]);
+  const {error} = await client.from("expenses").insert([{title,amount}]);
 
-  if(error){
-    alert(error.message);
-  } else {
+  if(error) alert(error.message);
+  else{
     alert("Expense added");
-    $("etitle").value="";
-    $("eamount").value="";
+    document.getElementById("etitle").value="";
+    document.getElementById("eamount").value="";
   }
 }
 
-loadData();
+load();
 
 </script>
 
