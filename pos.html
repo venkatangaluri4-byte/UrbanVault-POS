@@ -295,13 +295,29 @@ async function completeSale() {
   $("btnSale").disabled = true;
 
   const total = cart.reduce((s, x) => s + x.qty * x.price, 0);
+
   const { data: sale, error } = await client.from("sales").insert([{
     total,
     payment_method: $("payMethod").value
   }]).select().single();
 
-  if (error) { $("btnSale").disabled = false; return showMsg("Sale failed: " + error.message, "err"); }
+  if (error) {
+    $("btnSale").disabled = false;
+    return showMsg("Sale failed: " + error.message, "err");
+  }
 
+  // ✅ ADD THIS BLOCK HERE
+  // (for now just placeholder — later we connect customer)
+  const customerId = null; 
+
+  if (customerId) {
+    await client.rpc("increment_customer_spend", {
+      cid: customerId,
+      amt: total
+    });
+  }
+
+  // existing code continues...
   await client.from("sale_items").insert(
     cart.map(item => ({
       sale_id: sale.id,
@@ -315,7 +331,9 @@ async function completeSale() {
   for (const item of cart) {
     const inv = allInventory.find(x => x.product_id === item.productId && x.size === item.size);
     if (inv) {
-      await client.from("inventory").update({ quantity: Math.max(0, inv.quantity - item.qty) }).eq("id", inv.id);
+      await client.from("inventory")
+        .update({ quantity: Math.max(0, inv.quantity - item.qty) })
+        .eq("id", inv.id);
     }
   }
 
