@@ -4,67 +4,26 @@
 <meta charset="UTF-8">
 <title>Urban Vault — POS</title>
 
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 
 <style>
-body {
-  margin:0;
-  font-family:'DM Sans';
-  background:#141a0e;
-  color:#f0ede6;
-}
+body { margin:0; font-family:'DM Sans'; background:#141a0e; color:#f0ede6; }
 
-nav {
-  background:#1c2413;
-  padding:10px 20px;
-  display:flex;
-  gap:12px;
-}
-nav a {
-  color:#aaa;
-  text-decoration:none;
-}
-nav a.active {
-  color:#d4af37;
-}
+nav { background:#1c2413; padding:10px 20px; display:flex; gap:12px; }
+nav a { color:#aaa; text-decoration:none; }
+nav a.active { color:#d4af37; }
 
-.layout {
-  display:flex;
-}
+.layout { display:flex; }
+.left { width:65%; padding:20px; }
+.right { width:35%; background:#1c2413; padding:20px; border-left:1px solid #333; }
 
-.left {
-  width:65%;
-  padding:20px;
-}
+.card { background:#232e18; padding:10px; margin-bottom:10px; border-radius:8px; }
 
-.right {
-  width:35%;
-  background:#1c2413;
-  padding:20px;
-  border-left:1px solid #333;
-}
-
-.card {
-  background:#232e18;
-  padding:10px;
-  margin-bottom:10px;
-  border-radius:8px;
-}
-
-button {
-  background:#d4af37;
-  border:none;
-  padding:6px 10px;
-  cursor:pointer;
-}
+button { background:#d4af37; border:none; padding:6px 10px; cursor:pointer; border-radius:4px; }
 
 input, select {
-  width:100%;
-  padding:8px;
-  margin-bottom:8px;
-  background:#232e18;
-  border:1px solid #333;
-  color:#fff;
+  width:100%; padding:8px; margin-bottom:8px;
+  background:#232e18; border:1px solid #333; color:#fff;
 }
 
 .prod-grid {
@@ -73,10 +32,7 @@ input, select {
   gap:10px;
 }
 
-.total {
-  font-size:22px;
-  margin:10px 0;
-}
+.total { font-size:22px; margin:10px 0; }
 </style>
 </head>
 
@@ -132,14 +88,13 @@ input, select {
 <script src="supabase.js"></script>
 
 <script>
-
 const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let products = [];
 let inventory = [];
 let cart = [];
 
-// LOAD PRODUCTS + INVENTORY
+// LOAD DATA
 async function load(){
   const {data: p} = await client.from("products").select("*");
   const {data: i} = await client.from("inventory").select("*");
@@ -150,39 +105,38 @@ async function load(){
   renderProducts();
 }
 
-// RENDER PRODUCTS WITH SIZE + COLOR
+// RENDER PRODUCTS (FIXED - NO DUPLICATES)
 function renderProducts(){
   const q = document.getElementById("search").value.toLowerCase();
 
-  let list = [];
+  const filtered = products.filter(p =>
+    p.name.toLowerCase().includes(q)
+  );
 
-  products.forEach(prod => {
-    const sizes = inventory.filter(x => x.product_id === prod.id);
+  document.getElementById("products").innerHTML = filtered.map(p => {
 
-    sizes.forEach(s => {
-      list.push({
-        id: prod.id,
-        name: prod.name,
-        color: prod.color,
-        size: s.size,
-        price: prod.selling_price
-      });
-    });
-  });
+    const sizes = inventory
+      .filter(i => i.product_id === p.id && i.quantity > 0)
+      .map(i => `
+        <button onclick="add('${p.id}','${p.name}','${p.color}','${i.size}',${p.selling_price})">
+          ${i.size}
+        </button>
+      `).join("");
 
-  document.getElementById("products").innerHTML = list
-    .filter(p => p.name.toLowerCase().includes(q))
-    .map(p => `
+    return `
       <div class="card">
         <b>${p.name}</b><br>
-        ${p.color || ""} - ${p.size}<br>
-        $${p.price}
-        <button onclick="add('${p.id}','${p.name}','${p.color}','${p.size}',${p.price})">Add</button>
+        ${p.color || ""}<br>
+        $${p.selling_price}
+        <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap">
+          ${sizes || '<span style="color:#777">Out of stock</span>'}
+        </div>
       </div>
-    `).join("");
+    `;
+  }).join("");
 }
 
-// ADD TO CART (WITH SIZE)
+// ADD TO CART
 function add(id,name,color,size,price){
   const item = cart.find(x => x.id===id && x.size===size);
 
@@ -192,7 +146,7 @@ function add(id,name,color,size,price){
   renderCart();
 }
 
-// RENDER CART (SHOW SIZE)
+// RENDER CART
 function renderCart(){
   document.getElementById("cart").innerHTML = cart.map(i=>`
     <div>
@@ -210,7 +164,7 @@ function clearCart(){
   renderCart();
 }
 
-// CHECKOUT (SAVE SIZE)
+// CHECKOUT
 async function checkout(){
   const total = cart.reduce((s,x)=>s+x.qty*x.price,0);
 
@@ -254,7 +208,6 @@ async function addExpense(){
 }
 
 load();
-
 </script>
 
 </body>
