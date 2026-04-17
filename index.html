@@ -8,6 +8,21 @@
 
 <style>
 body { font-family:'DM Sans'; background:#141a0e; color:#f0ede6; }
+
+/* NAV */
+nav {
+  background:#1c2413;
+  padding:10px 20px;
+  display:flex;
+  gap:10px;
+}
+nav a {
+  color:#aaa;
+  text-decoration:none;
+}
+nav a.active { color:#d4af37; }
+
+/* PAGE */
 .page { padding:20px; max-width:1100px; margin:auto; }
 
 .stats {
@@ -40,6 +55,16 @@ body { font-family:'DM Sans'; background:#141a0e; color:#f0ede6; }
 
 <body>
 
+<!-- ✅ NAV RESTORED -->
+<nav>
+  <a href="index.html" class="active">Dashboard</a>
+  <a href="pos.html">POS</a>
+  <a href="products.html">Products</a>
+  <a href="sales.html">Sales</a>
+  <a href="pl.html">P&L</a>
+  <a href="customers.html">Customers</a>
+</nav>
+
 <div class="page">
 
 <div class="title">Dashboard</div>
@@ -65,46 +90,30 @@ const { data: si } = await client.from("sale_items").select("*");
 const { data: inv } = await client.from("inventory").select("*");
 const { data: exp } = await client.from("expenses").select("*");
 
-console.log("Expenses:", exp);
-
-// fallback safety
 const products = p || [];
 const purchases = pur || [];
 const saleItems = si || [];
 const inventory = inv || [];
 const expenses = exp || [];
 
-let investment = 0;
-let revenue = 0;
-let sold = 0;
-let expenseTotal = 0;
+let investment=0,revenue=0,sold=0,expenseTotal=0;
 
-// investment + revenue
-products.forEach(prod => {
+products.forEach(prod=>{
+  purchases.filter(x=>x.product_id===prod.id)
+    .forEach(b=>investment+=b.quantity*b.cost_per_unit);
 
-  purchases
-    .filter(x => x.product_id === prod.id)
-    .forEach(b => {
-      investment += b.quantity * b.cost_per_unit;
-    });
+  const items=saleItems.filter(x=>x.product_id===prod.id);
+  const qty=items.reduce((s,x)=>s+x.quantity,0);
 
-  const items = saleItems.filter(x => x.product_id === prod.id);
-  const qty = items.reduce((s, x) => s + x.quantity, 0);
-
-  revenue += qty * prod.selling_price;
-  sold += qty;
+  revenue+=qty*prod.selling_price;
+  sold+=qty;
 });
 
-// expenses
-expenses.forEach(e => {
-  expenseTotal += Number(e.amount) || 0;
-});
+expenses.forEach(e=>expenseTotal+=Number(e.amount)||0);
 
-// final profit
-const profit = revenue - investment - expenseTotal;
+const profit=revenue-investment-expenseTotal;
 
-// render stats
-document.getElementById("stats").innerHTML = `
+document.getElementById("stats").innerHTML=`
 <div class="card">Investment<br><b>$${investment.toFixed(2)}</b></div>
 <div class="card">Revenue<br><b>$${revenue.toFixed(2)}</b></div>
 <div class="card">Expenses<br><b>$${expenseTotal.toFixed(2)}</b></div>
@@ -112,23 +121,21 @@ document.getElementById("stats").innerHTML = `
 <div class="card">Items Sold<br><b>${sold}</b></div>
 `;
 
-// stock aggregation
-const stockMap = {};
-
-inventory.forEach(i => {
-  stockMap[i.product_id] = (stockMap[i.product_id] || 0) + i.quantity;
+// STOCK
+const stockMap={};
+inventory.forEach(i=>{
+  stockMap[i.product_id]=(stockMap[i.product_id]||0)+i.quantity;
 });
 
-// render stock blocks
-document.getElementById("stock").innerHTML = products.map(prod => {
-  const stock = stockMap[prod.id] || 0;
+document.getElementById("stock").innerHTML=products.map(prod=>{
+  const stock=stockMap[prod.id]||0;
 
   return `
-  <div class="card" style="border:${stock < 3 ? '1px solid red' : '1px solid #333'}">
+  <div class="card" style="border:${stock<3?'1px solid red':'1px solid #333'}">
     ${prod.name}<br>
-    <span style="color:#aaa">${prod.color || ""}</span><br>
+    <span style="color:#aaa">${prod.color||""}</span><br>
     <b style="font-size:22px">${stock}</b><br>
-    <span style="font-size:12px">${stock < 3 ? 'Low stock' : 'In stock'}</span>
+    <span style="font-size:12px">${stock<3?'Low stock':'In stock'}</span>
   </div>`;
 }).join("");
 
