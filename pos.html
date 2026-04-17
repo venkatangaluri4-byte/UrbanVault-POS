@@ -96,7 +96,6 @@ input, select {
 <div class="left">
 <h3>Select Product</h3>
 <input id="search" placeholder="Search..." oninput="renderProducts()">
-
 <div id="products" class="prod-grid"></div>
 </div>
 
@@ -137,42 +136,68 @@ input, select {
 const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let products = [];
+let inventory = [];
 let cart = [];
 
-// LOAD PRODUCTS
+// LOAD PRODUCTS + INVENTORY
 async function load(){
-  const {data} = await client.from("products").select("*");
-  products = data || [];
+  const {data: p} = await client.from("products").select("*");
+  const {data: i} = await client.from("inventory").select("*");
+
+  products = p || [];
+  inventory = i || [];
+
   renderProducts();
 }
 
-// RENDER PRODUCTS
+// RENDER PRODUCTS WITH SIZE + COLOR
 function renderProducts(){
   const q = document.getElementById("search").value.toLowerCase();
 
-  document.getElementById("products").innerHTML = products
+  let list = [];
+
+  products.forEach(prod => {
+    const sizes = inventory.filter(x => x.product_id === prod.id);
+
+    sizes.forEach(s => {
+      list.push({
+        id: prod.id,
+        name: prod.name,
+        color: prod.color,
+        size: s.size,
+        price: prod.selling_price
+      });
+    });
+  });
+
+  document.getElementById("products").innerHTML = list
     .filter(p => p.name.toLowerCase().includes(q))
     .map(p => `
       <div class="card">
-        ${p.name}<br>
-        $${p.selling_price}
-        <button onclick="add('${p.id}','${p.name}',${p.selling_price})">Add</button>
+        <b>${p.name}</b><br>
+        ${p.color || ""} - ${p.size}<br>
+        $${p.price}
+        <button onclick="add('${p.id}','${p.name}','${p.color}','${p.size}',${p.price})">Add</button>
       </div>
     `).join("");
 }
 
-// ADD TO CART
-function add(id,name,price){
-  const item = cart.find(x=>x.id===id);
+// ADD TO CART (WITH SIZE)
+function add(id,name,color,size,price){
+  const item = cart.find(x => x.id===id && x.size===size);
+
   if(item) item.qty++;
-  else cart.push({id,name,price,qty:1});
+  else cart.push({id,name,color,size,price,qty:1});
+
   renderCart();
 }
 
-// RENDER CART
+// RENDER CART (SHOW SIZE)
 function renderCart(){
   document.getElementById("cart").innerHTML = cart.map(i=>`
-    <div>${i.name} x${i.qty} = $${i.qty*i.price}</div>
+    <div>
+      ${i.name} (${i.color || ""} ${i.size}) x${i.qty} = $${i.qty*i.price}
+    </div>
   `).join("");
 
   const total = cart.reduce((s,x)=>s+x.qty*x.price,0);
@@ -185,7 +210,7 @@ function clearCart(){
   renderCart();
 }
 
-// CHECKOUT
+// CHECKOUT (SAVE SIZE)
 async function checkout(){
   const total = cart.reduce((s,x)=>s+x.qty*x.price,0);
 
@@ -200,6 +225,7 @@ async function checkout(){
     cart.map(i=>({
       sale_id:sale.id,
       product_id:i.id,
+      size:i.size,
       quantity:i.qty,
       price_at_sale:i.price
     }))
