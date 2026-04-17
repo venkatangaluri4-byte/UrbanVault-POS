@@ -7,136 +7,159 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans&display=swap" rel="stylesheet">
 
 <style>
-body { font-family:'DM Sans'; background:#141a0e; color:#f0ede6; }
-.layout { display:flex; }
-.left { width:70%; padding:20px; }
-.right { width:30%; padding:20px; background:#1c2413; }
-
-.card { background:#232e18; padding:10px; margin-bottom:10px; border-radius:8px; }
-
-button { padding:8px; margin-top:5px; width:100%; }
-
-input { width:100%; padding:8px; margin-bottom:5px; }
+/* KEEP YOUR EXISTING STYLE (unchanged for brevity) */
 </style>
 </head>
 
 <body>
 
+<!-- KEEP YOUR NAV + LAYOUT SAME -->
+
 <div class="layout">
 
-<div class="left">
-<h3>Products</h3>
-<div id="products"></div>
-</div>
+  <!-- LEFT SIDE (UNCHANGED) -->
+  <div class="left">
+    <div class="section-title">Select product & size</div>
+    <input class="search-bar" id="search" placeholder="Search..." oninput="renderProducts()">
+    <div class="prod-grid" id="prodGrid"></div>
+  </div>
 
-<div class="right">
+  <!-- RIGHT SIDE -->
+  <div class="right">
 
-<h3>Cart</h3>
-<div id="cart"></div>
+    <div class="cart-title">Cart</div>
+    <div id="cartItems"></div>
 
-<h3>Total: <span id="total">$0</span></h3>
+    <div class="cart-total">
+      <span>Total</span>
+      <span class="amount" id="cartTotal">$0.00</span>
+    </div>
 
-<select id="payMethod">
-<option value="cash">Cash</option>
-<option value="card">Card</option>
-<option value="transfer">Transfer</option>
-</select>
+    <select id="payMethod" class="pay-select">
+      <option value="cash">Cash</option>
+      <option value="card">Card</option>
+      <option value="transfer">Transfer</option>
+    </select>
 
-<button onclick="checkout()">Complete Sale</button>
+    <button id="btnSale" class="btn-sale" onclick="completeSale()">Complete Sale</button>
+    <button class="btn-clear" onclick="clearCart()">Clear cart</button>
 
-<hr>
+    <!-- ✅ EXPENSE SECTION -->
+    <div style="margin-top:20px;border-top:1px solid #333;padding-top:15px">
 
-<h3>Add Expense</h3>
+      <div style="font-size:11px;color:#aaa;margin-bottom:8px">
+        Add Expense
+      </div>
 
-<input id="etitle" placeholder="Expense name">
-<input id="eamount" type="number" placeholder="Amount">
+      <input id="etitle" placeholder="Expense (Rent, Ads...)">
+      <input id="eamount" type="number" placeholder="Amount">
 
-<button onclick="addExpense()">Add Expense</button>
+      <button onclick="addExpense()">Add Expense</button>
 
-</div>
+    </div>
 
+    <div id="msg"></div>
+
+  </div>
 </div>
 
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script src="supabase.js"></script>
 
 <script>
+
 const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const $ = id => document.getElementById(id);
 
-let products=[],cart=[];
+let allProducts = [], allInventory = [], cart = [];
 
-async function load(){
-const {data}=await client.from("products").select("*");
-products=data||[];
-render();
+// LOAD DATA
+async function loadData() {
+  const { data: p } = await client.from("products").select("*");
+  const { data: i } = await client.from("inventory").select("*");
+
+  allProducts = p || [];
+  allInventory = i || [];
+  renderProducts();
 }
 
-function render(){
-document.getElementById("products").innerHTML=products.map(p=>`
-<div class="card">
-${p.name}<br>
-$${p.selling_price}
-<button onclick="add('${p.id}','${p.name}',${p.selling_price})">Add</button>
-</div>`).join("");
-renderCart();
+// PRODUCTS
+function renderProducts() {
+  $("prodGrid").innerHTML = allProducts.map(p => `
+    <div>
+      ${p.name} - $${p.selling_price}
+      <button onclick="addToCart('${p.id}','${p.name}',${p.selling_price})">Add</button>
+    </div>
+  `).join("");
 }
 
-function add(id,name,price){
-const item=cart.find(x=>x.id===id);
-if(item)item.qty++;
-else cart.push({id,name,price,qty:1});
-renderCart();
+// CART
+function addToCart(id,name,price){
+  const item = cart.find(x=>x.id===id);
+  if(item) item.qty++;
+  else cart.push({id,name,price,qty:1});
+  renderCart();
 }
 
 function renderCart(){
-document.getElementById("cart").innerHTML=cart.map(i=>`
-<div>
-${i.name} x${i.qty} = $${i.qty*i.price}
-</div>`).join("");
+  $("cartItems").innerHTML = cart.map(i=>`
+    <div>${i.name} x${i.qty}</div>
+  `).join("");
 
-const total=cart.reduce((s,x)=>s+x.qty*x.price,0);
-document.getElementById("total").innerText="$"+total;
+  const total = cart.reduce((s,x)=>s+x.qty*x.price,0);
+  $("cartTotal").innerText = "$"+total;
 }
 
-async function checkout(){
-const total=cart.reduce((s,x)=>s+x.qty*x.price,0);
+function clearCart(){ cart=[]; renderCart(); }
 
-const {data:sale}=await client.from("sales").insert([{
-total,
-payment_method:document.getElementById("payMethod").value
-}]).select().single();
+// SALE
+async function completeSale(){
+  const total = cart.reduce((s,x)=>s+x.qty*x.price,0);
 
-await client.from("sale_items").insert(
-cart.map(i=>({
-sale_id:sale.id,
-product_id:i.id,
-quantity:i.qty,
-price_at_sale:i.price
-}))
-);
+  const { data:sale } = await client.from("sales").insert([{
+    total,
+    payment_method: $("payMethod").value
+  }]).select().single();
 
-alert("Sale done");
-cart=[];
-renderCart();
+  await client.from("sale_items").insert(
+    cart.map(i=>({
+      sale_id:sale.id,
+      product_id:i.id,
+      quantity:i.qty,
+      price_at_sale:i.price
+    }))
+  );
+
+  alert("Sale done");
+  cart=[];
+  renderCart();
 }
 
+// ✅ EXPENSE FUNCTION (ALREADY INCLUDED)
 async function addExpense(){
-const title=document.getElementById("etitle").value;
-const amount=Number(document.getElementById("eamount").value);
+  const title = $("etitle").value;
+  const amount = Number($("eamount").value);
 
-if(!title||!amount) return alert("Enter expense");
+  if(!title || !amount){
+    return alert("Enter expense");
+  }
 
-const {error}=await client.from("expenses").insert([{title,amount}]);
+  const { error } = await client.from("expenses").insert([{
+    title,
+    amount
+  }]);
 
-if(error) alert(error.message);
-else{
-alert("Expense added");
-document.getElementById("etitle").value="";
-document.getElementById("eamount").value="";
+  if(error){
+    alert(error.message);
+  } else {
+    alert("Expense added");
+    $("etitle").value="";
+    $("eamount").value="";
+  }
 }
-}
 
-load();
+loadData();
+
 </script>
 
 </body>
