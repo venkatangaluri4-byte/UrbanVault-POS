@@ -7,11 +7,34 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans&display=swap" rel="stylesheet">
 
 <style>
-body { font-family: 'DM Sans'; background:#141a0e; color:#f0ede6; }
+body { font-family:'DM Sans'; background:#141a0e; color:#f0ede6; }
 .page { padding:20px; max-width:1100px; margin:auto; }
-.stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; }
-.card { background:#232e18; padding:15px; border-radius:10px; }
-.title { font-family:'Bebas Neue'; font-size:28px; color:#d4af37; }
+
+.stats {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:10px;
+  margin-bottom:20px;
+}
+
+.card {
+  background:#232e18;
+  padding:15px;
+  border-radius:10px;
+}
+
+.title {
+  font-family:'Bebas Neue';
+  font-size:28px;
+  color:#d4af37;
+  margin-bottom:15px;
+}
+
+.stock-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:10px;
+}
 </style>
 </head>
 
@@ -19,12 +42,12 @@ body { font-family: 'DM Sans'; background:#141a0e; color:#f0ede6; }
 
 <div class="page">
 
-<h2 class="title">Dashboard</h2>
+<div class="title">Dashboard</div>
 
-<div class="stats-grid" id="stats"></div>
+<div class="stats" id="stats"></div>
 
 <h3>Stock Overview</h3>
-<div id="stock"></div>
+<div id="stock" class="stock-grid"></div>
 
 </div>
 
@@ -36,58 +59,79 @@ const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 async function load() {
 
-const [{data:p},{data:pur},{data:si},{data:inv},{data:exp}] = await Promise.all([
-client.from("products").select("*"),
-client.from("purchases").select("*"),
-client.from("sale_items").select("*"),
-client.from("inventory").select("*"),
-client.from("expenses").select("*")
-]);
+const { data: p } = await client.from("products").select("*");
+const { data: pur } = await client.from("purchases").select("*");
+const { data: si } = await client.from("sale_items").select("*");
+const { data: inv } = await client.from("inventory").select("*");
+const { data: exp } = await client.from("expenses").select("*");
 
-let investment=0,revenue=0,sold=0,expenses=0;
+console.log("Expenses:", exp);
 
-p.forEach(prod=>{
-pur.filter(x=>x.product_id===prod.id).forEach(b=>{
-investment+=b.quantity*b.cost_per_unit;
+// fallback safety
+const products = p || [];
+const purchases = pur || [];
+const saleItems = si || [];
+const inventory = inv || [];
+const expenses = exp || [];
+
+let investment = 0;
+let revenue = 0;
+let sold = 0;
+let expenseTotal = 0;
+
+// investment + revenue
+products.forEach(prod => {
+
+  purchases
+    .filter(x => x.product_id === prod.id)
+    .forEach(b => {
+      investment += b.quantity * b.cost_per_unit;
+    });
+
+  const items = saleItems.filter(x => x.product_id === prod.id);
+  const qty = items.reduce((s, x) => s + x.quantity, 0);
+
+  revenue += qty * prod.selling_price;
+  sold += qty;
 });
 
-const items=si.filter(x=>x.product_id===prod.id);
-const qty=items.reduce((s,x)=>s+x.quantity,0);
-
-revenue+=qty*prod.selling_price;
-sold+=qty;
+// expenses
+expenses.forEach(e => {
+  expenseTotal += Number(e.amount) || 0;
 });
 
-(exp||[]).forEach(e=>expenses+=e.amount);
+// final profit
+const profit = revenue - investment - expenseTotal;
 
-const profit = revenue - investment - expenses;
-
+// render stats
 document.getElementById("stats").innerHTML = `
 <div class="card">Investment<br><b>$${investment.toFixed(2)}</b></div>
 <div class="card">Revenue<br><b>$${revenue.toFixed(2)}</b></div>
-<div class="card">Expenses<br><b>$${expenses.toFixed(2)}</b></div>
+<div class="card">Expenses<br><b>$${expenseTotal.toFixed(2)}</b></div>
 <div class="card">Profit<br><b>$${profit.toFixed(2)}</b></div>
 <div class="card">Items Sold<br><b>${sold}</b></div>
 `;
 
-const stockMap={};
-inv.forEach(i=>{
-stockMap[i.product_id]=(stockMap[i.product_id]||0)+i.quantity;
+// stock aggregation
+const stockMap = {};
+
+inventory.forEach(i => {
+  stockMap[i.product_id] = (stockMap[i.product_id] || 0) + i.quantity;
 });
 
-document.getElementById("stock").innerHTML = `
-<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">
-${p.map(prod=>{
-const stock=stockMap[prod.id]||0;
-return `
-<div class="card" style="border:${stock<3?'1px solid red':'1px solid #333'}">
-${prod.name}<br>
-${prod.color||''}<br>
-<b>${stock}</b><br>
-${stock<3?'Low stock':''}
-</div>`;
-}).join("")}
-</div>`;
+// render stock blocks
+document.getElementById("stock").innerHTML = products.map(prod => {
+  const stock = stockMap[prod.id] || 0;
+
+  return `
+  <div class="card" style="border:${stock < 3 ? '1px solid red' : '1px solid #333'}">
+    ${prod.name}<br>
+    <span style="color:#aaa">${prod.color || ""}</span><br>
+    <b style="font-size:22px">${stock}</b><br>
+    <span style="font-size:12px">${stock < 3 ? 'Low stock' : 'In stock'}</span>
+  </div>`;
+}).join("");
+
 }
 
 load();
