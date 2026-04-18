@@ -8,75 +8,118 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+* { box-sizing: border-box; margin:0; padding:0; }
 
 :root {
-  --gold: #d4af37;
-  --bg: #141a0e; --bg2: #1c2413; --bg3: #232e18;
-  --surface: rgba(255,255,255,0.05);
-  --border: rgba(255,255,255,0.08);
-  --text: #f0ede6; --muted: rgba(240,237,230,0.5);
+  --gold:#d4af37;
+  --bg:#141a0e; --bg2:#1c2413; --bg3:#232e18;
+  --border:rgba(255,255,255,0.08);
+  --text:#f0ede6; --muted:rgba(240,237,230,0.5);
 }
 
-body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); }
+body {
+  font-family:'DM Sans',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+}
 
+/* NAV */
 nav {
-  background: var(--bg2);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  padding: 0 20px;
-  height: 52px;
+  background:var(--bg2);
+  display:flex;
+  padding:10px 20px;
+  gap:12px;
 }
+nav a { color:var(--muted); text-decoration:none; }
+nav a.active { color:var(--gold); }
 
-.nav-brand { font-family: 'Bebas Neue'; font-size: 22px; color: var(--gold); margin-right: 24px; }
-
-nav a { color: var(--muted); text-decoration: none; padding: 6px 14px; }
-nav a.active { color: var(--gold); }
-
-.page { padding: 24px; max-width: 1000px; margin: auto; }
+/* PAGE */
+.page { max-width:1100px; margin:auto; padding:20px; }
 
 .page-title {
-  font-family: 'Bebas Neue';
-  font-size: 32px;
-  color: var(--gold);
-  margin-bottom: 20px;
+  font-family:'Bebas Neue';
+  font-size:32px;
+  color:var(--gold);
+  margin-bottom:20px;
 }
 
-.top-bar { display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap; }
+/* FILTER */
+.top-bar {
+  display:flex;
+  gap:10px;
+  margin-bottom:20px;
+  flex-wrap:wrap;
+}
 
 input, select {
-  background: var(--bg3);
+  padding:8px;
+  background:var(--bg3);
   border:1px solid var(--border);
   color:#fff;
-  padding:8px;
 }
 
 button {
-  background: var(--gold);
+  background:var(--gold);
   border:none;
   padding:8px 12px;
   cursor:pointer;
 }
 
-.stat-row { display:flex; gap:10px; margin-bottom:20px; }
-
-.mini-stat {
-  background: var(--bg3);
-  padding:10px;
-  border-radius:8px;
+/* STATS BLOCKS */
+.stats {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:10px;
+  margin-bottom:20px;
 }
 
-table { width:100%; border-collapse: collapse; }
+.card {
+  background:var(--bg3);
+  padding:15px;
+  border-radius:10px;
+  text-align:center;
+}
 
-th, td {
+.card-title {
+  font-size:12px;
+  color:var(--muted);
+}
+
+.card-value {
+  font-size:22px;
+  margin-top:5px;
+}
+
+/* TABLE */
+table {
+  width:100%;
+  border-collapse:collapse;
+}
+
+th {
+  text-align:center;
   padding:10px;
   border-bottom:1px solid var(--border);
 }
 
-.items-list {
+td {
+  padding:10px;
+  border-bottom:1px solid var(--border);
+}
+
+td.items-list {
+  text-align:left;
   font-size:12px;
-  color: var(--muted);
+  color:var(--muted);
+}
+
+td.total {
+  text-align:right;
+  color:var(--gold);
+}
+
+td.payment {
+  text-align:center;
 }
 </style>
 </head>
@@ -84,7 +127,6 @@ th, td {
 <body>
 
 <nav>
-  <div class="nav-brand">Urban Vault</div>
   <a href="index.html">Dashboard</a>
   <a href="pos.html">POS</a>
   <a href="products.html">Products</a>
@@ -112,7 +154,8 @@ th, td {
 <button onclick="resetFilter()">Reset</button>
 </div>
 
-<div id="statRow"></div>
+<div id="statRow" class="stats"></div>
+
 <div id="salesTable"></div>
 
 </div>
@@ -132,40 +175,36 @@ function resetFilter(){
 
 async function loadSales(){
 
-let query = client
-  .from("sales")
-  .select("*")
-  .order("created_at", { ascending: false });
+let query = client.from("sales").select("*").order("created_at",{ascending:false});
 
-// FILTER LOGIC
-const from = document.getElementById("dateFrom").value;
-const to   = document.getElementById("dateTo").value;
-const pay  = document.getElementById("payFilter").value;
+const from=document.getElementById("dateFrom").value;
+const to=document.getElementById("dateTo").value;
+const pay=document.getElementById("payFilter").value;
 
-if(from) query = query.gte("created_at", from);
-if(to)   query = query.lte("created_at", to + "T23:59:59");
-if(pay)  query = query.eq("payment_method", pay);
+if(from) query=query.gte("created_at",from);
+if(to) query=query.lte("created_at",to+"T23:59:59");
+if(pay) query=query.eq("payment_method",pay);
 
-const {data:sales} = await query;
-const {data:items} = await client.from("sale_items").select("*");
-const {data:products} = await client.from("products").select("*");
+const {data:sales}=await query;
+const {data:items}=await client.from("sale_items").select("*");
+const {data:products}=await client.from("products").select("*");
 
 const pmap={};
-(products || []).forEach(p=>pmap[p.id]=p);
+(products||[]).forEach(p=>pmap[p.id]=p);
 
-// STATS
-const totalRevenue = (sales || []).reduce((s,x)=>s+x.total,0);
-const totalItems = (items || [])
-  .filter(i=>sales.find(s=>s.id===i.sale_id))
-  .reduce((s,x)=>s+x.quantity,0);
+/* STATS */
+const revenue=(sales||[]).reduce((s,x)=>s+x.total,0);
+const totalItems=(items||[])
+.filter(i=>sales.find(s=>s.id===i.sale_id))
+.reduce((s,x)=>s+x.quantity,0);
 
-document.getElementById("statRow").innerHTML = `
-<div class="mini-stat">Sales<br><b>${sales.length}</b></div>
-<div class="mini-stat">Revenue<br><b>$${totalRevenue}</b></div>
-<div class="mini-stat">Items<br><b>${totalItems}</b></div>
+document.getElementById("statRow").innerHTML=`
+<div class="card"><div class="card-title">Sales</div><div class="card-value">${sales.length}</div></div>
+<div class="card"><div class="card-title">Revenue</div><div class="card-value">$${revenue}</div></div>
+<div class="card"><div class="card-title">Items</div><div class="card-value">${totalItems}</div></div>
 `;
 
-// TABLE
+/* TABLE */
 let html=`<table>
 <tr>
 <th>Date</th>
@@ -175,9 +214,9 @@ let html=`<table>
 <th>Action</th>
 </tr>`;
 
-(sales || []).forEach(s=>{
+(sales||[]).forEach(s=>{
 
-const list=(items || [])
+const list=(items||[])
 .filter(i=>i.sale_id===s.id)
 .map(i=>{
 const p=pmap[i.product_id];
@@ -188,8 +227,8 @@ html+=`
 <tr>
 <td>${new Date(s.created_at).toLocaleDateString()}</td>
 <td class="items-list">${list||"-"}</td>
-<td>${s.payment_method}</td>
-<td>$${s.total}</td>
+<td class="payment">${s.payment_method}</td>
+<td class="total">$${s.total}</td>
 <td><button onclick="deleteSale('${s.id}')">Delete</button></td>
 </tr>`;
 });
