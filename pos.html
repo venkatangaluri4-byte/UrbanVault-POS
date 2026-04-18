@@ -79,7 +79,7 @@ input, select {
 <h3>Carrito</h3>
 <div id="cart"></div>
 
-<div class="total">Total: $<span id="total">0</span></div>
+<div class="total">Total: <span id="total">$0.00</span></div>
 
 <select id="payMethod">
 <option value="efectivo">Efectivo</option>
@@ -141,6 +141,15 @@ const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let products=[], inventory=[], cart=[];
 
+/* 💰 FORMATO MXN */
+function money(x){
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN"
+  }).format(x);
+}
+
+// LOAD
 async function load(){
   const {data:p}=await client.from("products").select("*");
   const {data:i}=await client.from("inventory").select("*");
@@ -148,6 +157,7 @@ async function load(){
   renderProducts();
 }
 
+// PRODUCTS
 function renderProducts(){
   const q=document.getElementById("search").value.toLowerCase();
 
@@ -159,12 +169,13 @@ function renderProducts(){
         .map(i=>`<button onclick="add('${p.id}','${p.name}','${p.color}','${i.size}',${p.selling_price})">${i.size}</button>`).join("");
 
       return `<div class="card">
-        <b>${p.name}</b><br>${p.color||""}<br>$${p.selling_price}
+        <b>${p.name}</b><br>${p.color||""}<br>${money(p.selling_price)}
         <div style="margin-top:8px">${sizes}</div>
       </div>`;
     }).join("");
 }
 
+// CART
 function add(id,name,color,size,price){
   const item=cart.find(x=>x.id===id && x.size===size);
   if(item) item.qty++;
@@ -177,18 +188,21 @@ function renderCart(){
     `<div>${i.name} (${i.color} ${i.size}) x${i.qty}</div>`).join("");
 
   const total=cart.reduce((s,x)=>s+x.qty*x.price,0);
-  document.getElementById("total").innerText=total;
+  document.getElementById("total").innerText=money(total);
 }
 
 function clearCart(){ cart=[]; renderCart(); }
 
+// CHECKOUT
 async function checkout(){
   const total=cart.reduce((s,x)=>s+x.qty*x.price,0);
 
-  const {data:sale}=await client.from("sales").insert([{
+  const {data:sale,error}=await client.from("sales").insert([{
     total,
     payment_method:document.getElementById("payMethod").value
   }]).select().single();
+
+  if(error) return alert(error.message);
 
   await client.from("sale_items").insert(
     cart.map(i=>({
@@ -201,10 +215,12 @@ async function checkout(){
   );
 
   showInvoice(cart,total);
+
   cart=[];
   renderCart();
 }
 
+// INVOICE
 function showInvoice(cart,total){
   const now=new Date();
   const invoiceNo="FAC-"+Date.now().toString().slice(-6);
@@ -217,21 +233,32 @@ function showInvoice(cart,total){
 
   document.getElementById("invoiceItems").innerHTML=cart.map(i=>`
     <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-      <div>${i.name}<br><span style="font-size:11px">${i.color} ${i.size} ×${i.qty}</span></div>
-      <div>$${i.qty*i.price}</div>
+      <div>
+        ${i.name}<br>
+        <span style="font-size:11px">${i.color} ${i.size} ×${i.qty}</span>
+      </div>
+      <div>${money(i.qty*i.price)}</div>
     </div>
   `).join("");
 
   document.getElementById("invoiceTotal").innerHTML=`
-    <div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>$${total}</span></div>
-    <div style="display:flex;justify-content:space-between"><span>Pago</span><span>${document.getElementById("payMethod").value}</span></div>
-    <div style="display:flex;justify-content:space-between;font-weight:bold"><span>Total</span><span>$${total}</span></div>
+    <div style="display:flex;justify-content:space-between">
+      <span>Subtotal</span><span>${money(total)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between">
+      <span>Pago</span><span>${document.getElementById("payMethod").value}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-weight:bold">
+      <span>Total</span><span>${money(total)}</span>
+    </div>
   `;
 
   document.getElementById("invoiceModal").style.display="flex";
 }
 
-function closeInvoice(){ document.getElementById("invoiceModal").style.display="none"; }
+function closeInvoice(){
+  document.getElementById("invoiceModal").style.display="none";
+}
 
 function printInvoice(){
   const content=document.getElementById("invoiceBox").innerHTML;
@@ -240,6 +267,7 @@ function printInvoice(){
   win.print();
 }
 
+// EXPENSE
 async function addExpense(){
   const title=document.getElementById("etitle").value;
   const amount=Number(document.getElementById("eamount").value);
