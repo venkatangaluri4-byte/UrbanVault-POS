@@ -1,151 +1,17 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>Urban Vault — POS</title>
-
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-
-<style>
-body { margin:0; font-family:'DM Sans'; background:#141a0e; color:#f0ede6; }
-nav { background:#1c2413; padding:10px 20px; display:flex; gap:12px; }
-nav a { color:#aaa; text-decoration:none; }
-nav a.active { color:#d4af37; }
-
-.layout { display:flex; }
-.left { width:65%; padding:20px; }
-.right { width:35%; background:#1c2413; padding:20px; border-left:1px solid #333; }
-
-.card { background:#232e18; padding:10px; margin-bottom:10px; border-radius:8px; }
-
-button { background:#d4af37; border:none; padding:6px 10px; cursor:pointer; border-radius:4px; }
-
-input, select {
-  width:100%; padding:8px; margin-bottom:8px;
-  background:#232e18; border:1px solid #333; color:#fff;
-}
-
-.prod-grid {
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
-  gap:10px;
-}
-
-.total { font-size:22px; margin:10px 0; }
-
-#invoiceModal, #customerModal {
-  display:none;
-  position:fixed;
-  top:0; left:0;
-  width:100%; height:100%;
-  background:rgba(0,0,0,0.7);
-  justify-content:center;
-  align-items:center;
-}
-
-.modalBox {
-  background:#fff;
-  color:#000;
-  padding:20px;
-  width:340px;
-  border-radius:8px;
-}
-</style>
-</head>
-
-<body>
-
-<nav>
-  <a href="index.html">Panel</a>
-  <a href="pos.html" class="active">POS</a>
-  <a href="products.html">Productos</a>
-  <a href="sales.html">Ventas</a>
-  <a href="pl.html">Ganancias</a>
-  <a href="customers.html">Clientes</a>
-</nav>
-
-<div class="layout">
-
-<div class="left">
-<h3>Seleccionar Producto</h3>
-<input id="search" placeholder="Buscar..." oninput="renderProducts()">
-<div id="products" class="prod-grid"></div>
-</div>
-
-<div class="right">
-
-<h3>Carrito</h3>
-<div id="cart"></div>
-
-<div class="total">Total: <span id="total">$0.00</span></div>
-
-<select id="payMethod">
-<option value="efectivo">Efectivo</option>
-<option value="tarjeta">Tarjeta</option>
-<option value="transferencia">Transferencia</option>
-</select>
-
-<button onclick="openCustomer()">Finalizar Venta</button>
-<button onclick="clearCart()">Vaciar Carrito</button>
-
-<hr>
-
-<h4>Agregar Gasto</h4>
-
-<input id="etitle" placeholder="Nombre del gasto">
-<input id="eamount" type="number" placeholder="Monto">
-
-<button onclick="addExpense()">Agregar Gasto</button>
-
-</div>
-</div>
-
-<!-- CUSTOMER FORM -->
-<div id="customerModal">
-  <div class="modalBox">
-    <h3>Datos del Cliente</h3>
-    <input id="cname" placeholder="Nombre">
-    <input id="cphone" placeholder="Teléfono">
-    <input id="clocation" placeholder="Ubicación">
-    <input id="shipping" type="number" placeholder="Envío (opcional)">
-    <button onclick="confirmSale()">Continuar</button>
-    <button onclick="closeCustomer()">Cancelar</button>
-  </div>
-</div>
-
-<!-- INVOICE -->
-<div id="invoiceModal">
-  <div class="modalBox" id="invoiceBox">
-
-    <div style="text-align:center;margin-bottom:10px">
-      <div style="font-size:18px;font-weight:bold">URBAN VAULT STREETWEAR</div>
-    </div>
-
-    <div id="invoiceMeta"></div>
-    <hr>
-    <div id="invoiceItems"></div>
-    <hr>
-    <div id="invoiceTotal"></div>
-
-    <div style="text-align:center;margin-top:10px">¡Gracias por tu compra!</div>
-
-    <button onclick="printInvoice()">Imprimir</button>
-    <button onclick="closeInvoice()">Cerrar</button>
-  </div>
-</div>
-
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<script src="supabase.js"></script>
+<!-- ONLY SCRIPT PART CHANGED — KEEP YOUR HTML/CSS SAME -->
 
 <script>
 const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let products=[], inventory=[], cart=[];
+let customerData=null;
 
+/* MONEY */
 function money(x){
   return new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN"}).format(x);
 }
 
+/* LOAD */
 async function load(){
   const {data:p}=await client.from("products").select("*");
   const {data:i}=await client.from("inventory").select("*");
@@ -153,15 +19,23 @@ async function load(){
   renderProducts();
 }
 
+/* PRODUCTS */
 function renderProducts(){
   const q=document.getElementById("search").value.toLowerCase();
 
   document.getElementById("products").innerHTML=products
     .filter(p=>p.name.toLowerCase().includes(q))
     .map(p=>{
+
       const sizes=inventory
-        .filter(i=>i.product_id===p.id && i.quantity>0)
-        .map(i=>`<button onclick="add('${p.id}','${p.name}','${p.color}','${i.size}',${p.selling_price})">${i.size}</button>`).join("");
+        .filter(i=>i.product_id===p.id)
+        .map(i=>`
+          <button 
+            ${i.quantity===0?"disabled":""}
+            onclick="add('${p.id}','${p.name}','${p.color}','${i.size}',${p.selling_price})">
+            ${i.size} (${i.quantity})
+          </button>
+        `).join("");
 
       return `<div class="card">
         <b>${p.name}</b><br>${p.color||""}<br>${money(p.selling_price)}
@@ -170,6 +44,7 @@ function renderProducts(){
     }).join("");
 }
 
+/* CART */
 function add(id,name,color,size,price){
   const item=cart.find(x=>x.id===id && x.size===size);
   if(item) item.qty++;
@@ -187,6 +62,7 @@ function renderCart(){
 
 function clearCart(){ cart=[]; renderCart(); }
 
+/* CUSTOMER FLOW */
 function openCustomer(){
   if(cart.length===0) return alert("Carrito vacío");
   document.getElementById("customerModal").style.display="flex";
@@ -196,33 +72,58 @@ function closeCustomer(){
   document.getElementById("customerModal").style.display="none";
 }
 
-async function confirmSale(){
+function confirmSale(){
+  customerData={
+    name:document.getElementById("cname").value,
+    phone:document.getElementById("cphone").value,
+    location:document.getElementById("clocation").value,
+    shipping:Number(document.getElementById("shipping").value||0)
+  };
 
-  const name=document.getElementById("cname").value;
-  const phone=document.getElementById("cphone").value;
-  const location=document.getElementById("clocation").value;
-  const shipping=Number(document.getElementById("shipping").value||0);
+  closeCustomer();
+  alert("Cliente guardado. Ahora presiona nuevamente 'Finalizar Venta'");
+}
+
+/* FINAL CHECKOUT */
+async function checkout(){
+
+  if(!customerData){
+    return alert("Primero ingresa datos del cliente");
+  }
+
+  const {name,phone,location,shipping}=customerData;
 
   const productTotal=cart.reduce((s,x)=>s+x.qty*x.price,0);
   const finalTotal=productTotal+shipping;
 
-  /* ✅ SAVE CUSTOMER (NO DUPLICATES) */
+  /* SAVE CUSTOMER SAFE */
   if(phone){
-    const { data: existing } = await client
+    const {data:existing}=await client
       .from("customers")
       .select("id")
-      .eq("phone", phone)
-      .single();
+      .eq("phone",phone)
+      .maybeSingle();
 
     if(!existing){
-      await client.from("customers").insert([{
-        name,
-        phone,
-        location
-      }]);
+      await client.from("customers").insert([{name,phone,location}]);
     }
   }
 
+  /* VALIDATE STOCK FIRST */
+  for(const i of cart){
+    const {data:stock}=await client
+      .from("inventory")
+      .select("*")
+      .eq("product_id",i.id)
+      .eq("size",i.size)
+      .single();
+
+    if(!stock || stock.quantity<i.qty){
+      return alert(`Stock insuficiente: ${i.name} (${i.size})`);
+    }
+  }
+
+  /* CREATE SALE */
   const {data:sale,error}=await client.from("sales").insert([{
     total:productTotal,
     payment_method:document.getElementById("payMethod").value
@@ -230,6 +131,21 @@ async function confirmSale(){
 
   if(error) return alert(error.message);
 
+  /* REDUCE STOCK */
+  for(const i of cart){
+    const {data:stock}=await client
+      .from("inventory")
+      .select("*")
+      .eq("product_id",i.id)
+      .eq("size",i.size)
+      .single();
+
+    await client.from("inventory")
+      .update({quantity:stock.quantity-i.qty})
+      .eq("id",stock.id);
+  }
+
+  /* SAVE ITEMS */
   await client.from("sale_items").insert(
     cart.map(i=>({
       sale_id:sale.id,
@@ -240,15 +156,18 @@ async function confirmSale(){
     }))
   );
 
+  /* INVOICE */
   showInvoice(cart,finalTotal,shipping,name,phone,location);
 
   cart=[];
+  customerData=null;
   renderCart();
-  closeCustomer();
+
+  await load(); // 🔥 IMPORTANT REFRESH
 }
 
+/* INVOICE */
 function showInvoice(cart,total,shipping,name,phone,location){
-
   const now=new Date();
 
   document.getElementById("invoiceMeta").innerHTML=`
@@ -285,6 +204,7 @@ function printInvoice(){
   win.print();
 }
 
+/* EXPENSE */
 async function addExpense(){
   const title=document.getElementById("etitle").value;
   const amount=Number(document.getElementById("eamount").value);
@@ -292,12 +212,8 @@ async function addExpense(){
   if(!title||!amount) return alert("Ingresa un gasto válido");
 
   await client.from("expenses").insert([{title,amount}]);
-
   alert("Gasto agregado");
 }
 
 load();
 </script>
-
-</body>
-</html>
