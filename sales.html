@@ -95,18 +95,25 @@ async function loadSales() {
   $("salesTable").innerHTML = `<p class="loading">Loading...</p>`;
 
   let query = client.from("sales").select("*").order("created_at", { ascending: false });
+
   const from = $("dateFrom").value, to = $("dateTo").value, pay = $("payFilter").value;
   if (from) query = query.gte("created_at", from);
   if (to)   query = query.lte("created_at", to + "T23:59:59");
   if (pay)  query = query.eq("payment_method", pay);
 
   const { data: sales } = await query;
-  const { data: saleItems } = await client.from("sale_items").select("*, products(name, color)");
+  const { data: items } = await client.from("sale_items").select("*");
+  const { data: products } = await client.from("products").select("*");
 
-  const s = sales || [], si = saleItems || [];
+  const s = sales || [], si = items || [], p = products || [];
+
+  const productMap = {};
+  p.forEach(prod => productMap[prod.id] = prod);
 
   const totalRevenue = s.reduce((sum, x) => sum + x.total, 0);
-  const totalItems   = si.filter(x => s.find(sale => sale.id === x.sale_id)).reduce((sum, x) => sum + x.quantity, 0);
+  const totalItems = si
+    .filter(x => s.find(sale => sale.id === x.sale_id))
+    .reduce((sum, x) => sum + x.quantity, 0);
 
   $("statRow").innerHTML = `
     <div class="mini-stat"><div class="ml">Transactions</div><div class="mv">${s.length}</div></div>
@@ -115,30 +122,82 @@ async function loadSales() {
   `;
 
   if (s.length === 0) {
-    $("salesTable").innerHTML = `<p class="loading">No sales found for this filter.</p>`;
+    $("salesTable").innerHTML = `<p class="loading">No sales found.</p>`;
     return;
   }
 
-  let html = `<table><tr><th>Date</th><th>Time</th><th>Payment</th><th>Items</th><th>Total</th></tr>`;
+  let html = `<table>
+    <tr>
+      <th>Date</th>
+      <th>Time</th>
+      <th>Payment</th>
+      <th>Items</th>
+      <th>Total</th>
+      <th>Action</th>
+    </tr>`;
 
   s.forEach(sale => {
-    const dt = new Date(sale.created_at);
-    const dateStr = dt.toLocaleDateString();
-    const timeStr = dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    const items = si.filter(x => x.sale_id === sale.id);
-    const itemsList = items.map(x => `${x.products?.name || "?"} (${x.size}) ×${x.quantity}`).join(", ");
-    const badgeClass = sale.payment_method === "cash" ? "badge-cash" : sale.payment_method === "card" ? "badge-card" : "badge-transfer";
 
-    html += `<tr>
-      <td>${dateStr}</td>
-      <td style="color:var(--muted)">${timeStr}</td>
+    const dt = new Date(sale.created_at);
+
+    const itemsList = si
+      .filter(x => x.sale_id === sale.id)
+      .map(x => {
+        const prod = productMap[x.product_id];
+        return `${prod?.name || "Item"} (${prod?.color || ""} ${x.size}) ×${x.quantity}`;
+      })
+      .join("<br>");
+
+    const badgeClass =
+      sale.payment_method === "cash" ? "badge-cash" :
+      sale.payment_method === "card" ? "badge-card" : "badge-transfer";
+
+    html += `
+    <tr>
+      <td>${dt.toLocaleDateString()}</td>
+      <td style="color:var(--muted)">${dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</td>
       <td><span class="badge ${badgeClass}">${sale.payment_method}</span></td>
       <td><div class="items-list">${itemsList || "—"}</div></td>
-      <td style="color:var(--gold);font-weight:500">$${sale.total.toFixed(2)}</td>
+      <td style="color:var(--gold)">$${sale.total.toFixed(2)}</td>
+
+      <td>
+        <button onclick="editSale('${sale.id}')">Edit</button>
+        <button onclick="deleteSale('${sale.id}')">Delete</button>
+      </td>
     </tr>`;
   });
 
   $("salesTable").innerHTML = html + "</table>";
+}
+
+// DELETE
+async function deleteSale(id){
+  if(!confirm("Delete this sale?")) return;
+
+  await client.from("sale_items").delete().eq("sale_id", id);
+  const { error } = await client.from("sales").delete().eq("id", id);
+
+  if(error) alert(error.message);
+  else loadSales();
+}
+
+// EDIT (load into POS)
+async function editSale(id){
+  const { data: items } = await client
+    .from("sale_items")
+    .select("*")
+    .eq("sale_id", id);
+
+  if(!items || items.length === 0){
+    return alert("No items found");
+  }
+
+  localStorage.setItem("editSale", JSON.stringify({
+    saleId: id,
+    items: items
+  }));
+
+  window.location.href = "pos.html";
 }
 
 loadSales();
