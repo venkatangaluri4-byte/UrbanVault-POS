@@ -33,6 +33,25 @@ input, select {
 }
 
 .total { font-size:22px; margin:10px 0; }
+
+/* INVOICE */
+#invoiceModal {
+  display:none;
+  position:fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  background:rgba(0,0,0,0.7);
+  justify-content:center;
+  align-items:center;
+}
+
+#invoiceBox {
+  background:#fff;
+  color:#000;
+  padding:20px;
+  width:320px;
+  border-radius:8px;
+}
 </style>
 </head>
 
@@ -84,6 +103,20 @@ input, select {
 
 </div>
 
+<!-- INVOICE POPUP -->
+<div id="invoiceModal">
+  <div id="invoiceBox">
+    <h3 style="text-align:center">Urban Vault</h3>
+    <hr>
+    <div id="invoiceItems"></div>
+    <hr>
+    <div id="invoiceTotal"></div>
+    <br>
+    <button onclick="printInvoice()">Print</button>
+    <button onclick="closeInvoice()">Close</button>
+  </div>
+</div>
+
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script src="supabase.js"></script>
 
@@ -94,7 +127,7 @@ let products = [];
 let inventory = [];
 let cart = [];
 
-// LOAD DATA
+// LOAD
 async function load(){
   const {data: p} = await client.from("products").select("*");
   const {data: i} = await client.from("inventory").select("*");
@@ -105,38 +138,34 @@ async function load(){
   renderProducts();
 }
 
-// RENDER PRODUCTS (FIXED - NO DUPLICATES)
+// RENDER PRODUCTS
 function renderProducts(){
   const q = document.getElementById("search").value.toLowerCase();
 
-  const filtered = products.filter(p =>
-    p.name.toLowerCase().includes(q)
-  );
+  document.getElementById("products").innerHTML = products
+    .filter(p => p.name.toLowerCase().includes(q))
+    .map(p => {
 
-  document.getElementById("products").innerHTML = filtered.map(p => {
+      const sizes = inventory
+        .filter(i => i.product_id === p.id && i.quantity > 0)
+        .map(i => `
+          <button onclick="add('${p.id}','${p.name}','${p.color}','${i.size}',${p.selling_price})">
+            ${i.size}
+          </button>
+        `).join("");
 
-    const sizes = inventory
-      .filter(i => i.product_id === p.id && i.quantity > 0)
-      .map(i => `
-        <button onclick="add('${p.id}','${p.name}','${p.color}','${i.size}',${p.selling_price})">
-          ${i.size}
-        </button>
-      `).join("");
-
-    return `
-      <div class="card">
-        <b>${p.name}</b><br>
-        ${p.color || ""}<br>
-        $${p.selling_price}
-        <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap">
-          ${sizes || '<span style="color:#777">Out of stock</span>'}
+      return `
+        <div class="card">
+          <b>${p.name}</b><br>
+          ${p.color || ""}<br>
+          $${p.selling_price}
+          <div style="margin-top:8px">${sizes}</div>
         </div>
-      </div>
-    `;
-  }).join("");
+      `;
+    }).join("");
 }
 
-// ADD TO CART
+// CART
 function add(id,name,color,size,price){
   const item = cart.find(x => x.id===id && x.size===size);
 
@@ -146,25 +175,21 @@ function add(id,name,color,size,price){
   renderCart();
 }
 
-// RENDER CART
 function renderCart(){
   document.getElementById("cart").innerHTML = cart.map(i=>`
-    <div>
-      ${i.name} (${i.color || ""} ${i.size}) x${i.qty} = $${i.qty*i.price}
-    </div>
+    <div>${i.name} (${i.color} ${i.size}) x${i.qty}</div>
   `).join("");
 
   const total = cart.reduce((s,x)=>s+x.qty*x.price,0);
   document.getElementById("total").innerText = total;
 }
 
-// CLEAR CART
 function clearCart(){
   cart=[];
   renderCart();
 }
 
-// CHECKOUT
+// CHECKOUT + INVOICE
 async function checkout(){
   const total = cart.reduce((s,x)=>s+x.qty*x.price,0);
 
@@ -185,26 +210,50 @@ async function checkout(){
     }))
   );
 
-  alert("Sale complete");
+  showInvoice(cart, total);
+
   cart=[];
   renderCart();
 }
 
-// ADD EXPENSE
+// INVOICE
+function showInvoice(cart,total){
+  document.getElementById("invoiceItems").innerHTML = cart.map(i=>`
+    <div>
+      ${i.name} (${i.color} ${i.size}) x${i.qty}
+      <span style="float:right">$${i.qty*i.price}</span>
+    </div>
+  `).join("");
+
+  document.getElementById("invoiceTotal").innerHTML =
+    `<b>Total: $${total}</b>`;
+
+  document.getElementById("invoiceModal").style.display="flex";
+}
+
+function closeInvoice(){
+  document.getElementById("invoiceModal").style.display="none";
+}
+
+function printInvoice(){
+  const content = document.getElementById("invoiceBox").innerHTML;
+  const win = window.open("", "", "width=400,height=600");
+  win.document.write(content);
+  win.print();
+}
+
+// EXPENSE
 async function addExpense(){
   const title = document.getElementById("etitle").value;
   const amount = Number(document.getElementById("eamount").value);
 
   if(!title || !amount) return alert("Enter expense");
 
-  const {error} = await client.from("expenses").insert([{title,amount}]);
+  await client.from("expenses").insert([{title,amount}]);
 
-  if(error) alert(error.message);
-  else{
-    alert("Expense added");
-    document.getElementById("etitle").value="";
-    document.getElementById("eamount").value="";
-  }
+  alert("Expense added");
+  document.getElementById("etitle").value="";
+  document.getElementById("eamount").value="";
 }
 
 load();
