@@ -34,7 +34,7 @@ input, select {
 
 .total { font-size:22px; margin:10px 0; }
 
-#invoiceModal {
+#invoiceModal, #customerModal {
   display:none;
   position:fixed;
   top:0; left:0;
@@ -44,13 +44,12 @@ input, select {
   align-items:center;
 }
 
-#invoiceBox {
+.modalBox {
   background:#fff;
   color:#000;
   padding:20px;
   width:340px;
   border-radius:8px;
-  font-size:13px;
 }
 </style>
 </head>
@@ -87,7 +86,7 @@ input, select {
 <option value="transferencia">Transferencia</option>
 </select>
 
-<button onclick="checkout()">Finalizar Venta</button>
+<button onclick="openCustomer()">Finalizar Venta</button>
 <button onclick="clearCart()">Vaciar Carrito</button>
 
 <hr>
@@ -102,34 +101,37 @@ input, select {
 </div>
 </div>
 
-<!-- FACTURA -->
+<!-- CUSTOMER FORM -->
+<div id="customerModal">
+  <div class="modalBox">
+    <h3>Datos del Cliente</h3>
+    <input id="cname" placeholder="Nombre">
+    <input id="cphone" placeholder="Teléfono">
+    <input id="clocation" placeholder="Ubicación">
+    <input id="shipping" type="number" placeholder="Envío (opcional)">
+    <button onclick="confirmSale()">Continuar</button>
+    <button onclick="closeCustomer()">Cancelar</button>
+  </div>
+</div>
+
+<!-- INVOICE -->
 <div id="invoiceModal">
-  <div id="invoiceBox">
+  <div class="modalBox">
 
     <div style="text-align:center;margin-bottom:10px">
       <div style="font-size:18px;font-weight:bold">URBAN VAULT STREETWEAR</div>
-      <div style="font-size:11px;color:#555">Moda Urbana Premium</div>
     </div>
 
-    <div id="invoiceMeta" style="font-size:11px;margin-bottom:10px"></div>
-
+    <div id="invoiceMeta"></div>
     <hr>
-
     <div id="invoiceItems"></div>
-
     <hr>
-
     <div id="invoiceTotal"></div>
 
-    <div style="text-align:center;margin-top:10px;font-size:11px">
-      ¡Gracias por tu compra! 🙏
-    </div>
-
-    <br>
+    <div style="text-align:center;margin-top:10px">¡Gracias por tu compra!</div>
 
     <button onclick="printInvoice()">Imprimir</button>
     <button onclick="closeInvoice()">Cerrar</button>
-
   </div>
 </div>
 
@@ -141,15 +143,10 @@ const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let products=[], inventory=[], cart=[];
 
-/* 💰 FORMATO MXN */
 function money(x){
-  return new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "MXN"
-  }).format(x);
+  return new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN"}).format(x);
 }
 
-// LOAD
 async function load(){
   const {data:p}=await client.from("products").select("*");
   const {data:i}=await client.from("inventory").select("*");
@@ -157,7 +154,6 @@ async function load(){
   renderProducts();
 }
 
-// PRODUCTS
 function renderProducts(){
   const q=document.getElementById("search").value.toLowerCase();
 
@@ -170,12 +166,11 @@ function renderProducts(){
 
       return `<div class="card">
         <b>${p.name}</b><br>${p.color||""}<br>${money(p.selling_price)}
-        <div style="margin-top:8px">${sizes}</div>
+        <div>${sizes}</div>
       </div>`;
     }).join("");
 }
 
-// CART
 function add(id,name,color,size,price){
   const item=cart.find(x=>x.id===id && x.size===size);
   if(item) item.qty++;
@@ -193,16 +188,29 @@ function renderCart(){
 
 function clearCart(){ cart=[]; renderCart(); }
 
-// CHECKOUT
-async function checkout(){
-  const total=cart.reduce((s,x)=>s+x.qty*x.price,0);
+function openCustomer(){
+  if(cart.length===0) return alert("Carrito vacío");
+  document.getElementById("customerModal").style.display="flex";
+}
 
-  const {data:sale,error}=await client.from("sales").insert([{
-    total,
+function closeCustomer(){
+  document.getElementById("customerModal").style.display="none";
+}
+
+async function confirmSale(){
+
+  const name=document.getElementById("cname").value;
+  const phone=document.getElementById("cphone").value;
+  const location=document.getElementById("clocation").value;
+  const shipping=Number(document.getElementById("shipping").value||0);
+
+  const productTotal=cart.reduce((s,x)=>s+x.qty*x.price,0);
+  const finalTotal=productTotal+shipping;
+
+  const {data:sale}=await client.from("sales").insert([{
+    total:productTotal,
     payment_method:document.getElementById("payMethod").value
   }]).select().single();
-
-  if(error) return alert(error.message);
 
   await client.from("sale_items").insert(
     cart.map(i=>({
@@ -214,43 +222,35 @@ async function checkout(){
     }))
   );
 
-  showInvoice(cart,total);
+  showInvoice(cart,finalTotal,shipping,name,phone,location);
 
   cart=[];
   renderCart();
+  closeCustomer();
 }
 
-// INVOICE
-function showInvoice(cart,total){
+function showInvoice(cart,total,shipping,name,phone,location){
+
   const now=new Date();
-  const invoiceNo="FAC-"+Date.now().toString().slice(-6);
 
   document.getElementById("invoiceMeta").innerHTML=`
-    Factura: ${invoiceNo}<br>
-    Fecha: ${now.toLocaleDateString()}<br>
-    Hora: ${now.toLocaleTimeString()}
+    Cliente: ${name}<br>
+    Tel: ${phone}<br>
+    Ubicación: ${location}<br><br>
+    Fecha: ${now.toLocaleDateString()}
   `;
 
   document.getElementById("invoiceItems").innerHTML=cart.map(i=>`
-    <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-      <div>
-        ${i.name}<br>
-        <span style="font-size:11px">${i.color} ${i.size} ×${i.qty}</span>
-      </div>
+    <div style="display:flex;justify-content:space-between">
+      <div>${i.name} (${i.size}) x${i.qty}</div>
       <div>${money(i.qty*i.price)}</div>
     </div>
   `).join("");
 
   document.getElementById("invoiceTotal").innerHTML=`
-    <div style="display:flex;justify-content:space-between">
-      <span>Subtotal</span><span>${money(total)}</span>
-    </div>
-    <div style="display:flex;justify-content:space-between">
-      <span>Pago</span><span>${document.getElementById("payMethod").value}</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;font-weight:bold">
-      <span>Total</span><span>${money(total)}</span>
-    </div>
+    <div>Productos: ${money(total-shipping)}</div>
+    <div>Envío: ${money(shipping)}</div>
+    <b>Total: ${money(total)}</b>
   `;
 
   document.getElementById("invoiceModal").style.display="flex";
@@ -267,7 +267,6 @@ function printInvoice(){
   win.print();
 }
 
-// EXPENSE
 async function addExpense(){
   const title=document.getElementById("etitle").value;
   const amount=Number(document.getElementById("eamount").value);
@@ -277,8 +276,6 @@ async function addExpense(){
   await client.from("expenses").insert([{title,amount}]);
 
   alert("Gasto agregado");
-  document.getElementById("etitle").value="";
-  document.getElementById("eamount").value="";
 }
 
 load();
