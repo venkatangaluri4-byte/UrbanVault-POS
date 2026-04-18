@@ -49,8 +49,9 @@ input, select {
   background:#fff;
   color:#000;
   padding:20px;
-  width:320px;
+  width:340px;
   border-radius:8px;
+  font-size:13px;
 }
 </style>
 </head>
@@ -100,20 +101,36 @@ input, select {
 <button onclick="addExpense()">Add Expense</button>
 
 </div>
-
 </div>
 
-<!-- INVOICE POPUP -->
+<!-- INVOICE -->
 <div id="invoiceModal">
   <div id="invoiceBox">
-    <h3 style="text-align:center">Urban Vault</h3>
+
+    <div style="text-align:center;margin-bottom:10px">
+      <div style="font-size:18px;font-weight:bold">URBAN VAULT STREETWEAR</div>
+      <div style="font-size:11px;color:#555">Premium Streetwear</div>
+    </div>
+
+    <div id="invoiceMeta" style="font-size:11px;margin-bottom:10px"></div>
+
     <hr>
+
     <div id="invoiceItems"></div>
+
     <hr>
+
     <div id="invoiceTotal"></div>
+
+    <div style="text-align:center;margin-top:10px;font-size:11px">
+      Thank you for shopping with us 🙏
+    </div>
+
     <br>
+
     <button onclick="printInvoice()">Print</button>
     <button onclick="closeInvoice()">Close</button>
+
   </div>
 </div>
 
@@ -123,82 +140,60 @@ input, select {
 <script>
 const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let products = [];
-let inventory = [];
-let cart = [];
+let products=[], inventory=[], cart=[];
 
 // LOAD
 async function load(){
-  const {data: p} = await client.from("products").select("*");
-  const {data: i} = await client.from("inventory").select("*");
-
-  products = p || [];
-  inventory = i || [];
-
+  const {data:p}=await client.from("products").select("*");
+  const {data:i}=await client.from("inventory").select("*");
+  products=p||[]; inventory=i||[];
   renderProducts();
 }
 
-// RENDER PRODUCTS
+// PRODUCTS
 function renderProducts(){
-  const q = document.getElementById("search").value.toLowerCase();
+  const q=document.getElementById("search").value.toLowerCase();
 
-  document.getElementById("products").innerHTML = products
-    .filter(p => p.name.toLowerCase().includes(q))
-    .map(p => {
+  document.getElementById("products").innerHTML=products
+    .filter(p=>p.name.toLowerCase().includes(q))
+    .map(p=>{
+      const sizes=inventory
+        .filter(i=>i.product_id===p.id && i.quantity>0)
+        .map(i=>`<button onclick="add('${p.id}','${p.name}','${p.color}','${i.size}',${p.selling_price})">${i.size}</button>`).join("");
 
-      const sizes = inventory
-        .filter(i => i.product_id === p.id && i.quantity > 0)
-        .map(i => `
-          <button onclick="add('${p.id}','${p.name}','${p.color}','${i.size}',${p.selling_price})">
-            ${i.size}
-          </button>
-        `).join("");
-
-      return `
-        <div class="card">
-          <b>${p.name}</b><br>
-          ${p.color || ""}<br>
-          $${p.selling_price}
-          <div style="margin-top:8px">${sizes}</div>
-        </div>
-      `;
+      return `<div class="card">
+        <b>${p.name}</b><br>${p.color||""}<br>$${p.selling_price}
+        <div style="margin-top:8px">${sizes}</div>
+      </div>`;
     }).join("");
 }
 
 // CART
 function add(id,name,color,size,price){
-  const item = cart.find(x => x.id===id && x.size===size);
-
+  const item=cart.find(x=>x.id===id && x.size===size);
   if(item) item.qty++;
   else cart.push({id,name,color,size,price,qty:1});
-
   renderCart();
 }
 
 function renderCart(){
-  document.getElementById("cart").innerHTML = cart.map(i=>`
-    <div>${i.name} (${i.color} ${i.size}) x${i.qty}</div>
-  `).join("");
+  document.getElementById("cart").innerHTML=cart.map(i=>
+    `<div>${i.name} (${i.color} ${i.size}) x${i.qty}</div>`).join("");
 
-  const total = cart.reduce((s,x)=>s+x.qty*x.price,0);
-  document.getElementById("total").innerText = total;
+  const total=cart.reduce((s,x)=>s+x.qty*x.price,0);
+  document.getElementById("total").innerText=total;
 }
 
-function clearCart(){
-  cart=[];
-  renderCart();
-}
+function clearCart(){ cart=[]; renderCart(); }
 
-// CHECKOUT + INVOICE
+// CHECKOUT
 async function checkout(){
-  const total = cart.reduce((s,x)=>s+x.qty*x.price,0);
+  const total=cart.reduce((s,x)=>s+x.qty*x.price,0);
 
-  const {data:sale,error} = await client.from("sales").insert([{
+  const {data:sale}=await client.from("sales").insert([{
     total,
-    payment_method: document.getElementById("payMethod").value
+    payment_method:document.getElementById("payMethod").value
   }]).select().single();
-
-  if(error) return alert(error.message);
 
   await client.from("sale_items").insert(
     cart.map(i=>({
@@ -210,7 +205,7 @@ async function checkout(){
     }))
   );
 
-  showInvoice(cart, total);
+  showInvoice(cart,total);
 
   cart=[];
   renderCart();
@@ -218,15 +213,37 @@ async function checkout(){
 
 // INVOICE
 function showInvoice(cart,total){
-  document.getElementById("invoiceItems").innerHTML = cart.map(i=>`
-    <div>
-      ${i.name} (${i.color} ${i.size}) x${i.qty}
-      <span style="float:right">$${i.qty*i.price}</span>
+
+  const now=new Date();
+  const invoiceNo="INV-"+Date.now().toString().slice(-6);
+
+  document.getElementById("invoiceMeta").innerHTML=`
+    Invoice: ${invoiceNo}<br>
+    Date: ${now.toLocaleDateString()}<br>
+    Time: ${now.toLocaleTimeString()}
+  `;
+
+  document.getElementById("invoiceItems").innerHTML=cart.map(i=>`
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+      <div>
+        ${i.name}<br>
+        <span style="font-size:11px;color:#555">${i.color} ${i.size} ×${i.qty}</span>
+      </div>
+      <div>$${i.qty*i.price}</div>
     </div>
   `).join("");
 
-  document.getElementById("invoiceTotal").innerHTML =
-    `<b>Total: $${total}</b>`;
+  document.getElementById("invoiceTotal").innerHTML=`
+    <div style="display:flex;justify-content:space-between">
+      <span>Subtotal</span><span>$${total}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between">
+      <span>Payment</span><span>${document.getElementById("payMethod").value}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-weight:bold">
+      <span>Total</span><span>$${total}</span>
+    </div>
+  `;
 
   document.getElementById("invoiceModal").style.display="flex";
 }
@@ -236,18 +253,18 @@ function closeInvoice(){
 }
 
 function printInvoice(){
-  const content = document.getElementById("invoiceBox").innerHTML;
-  const win = window.open("", "", "width=400,height=600");
+  const content=document.getElementById("invoiceBox").innerHTML;
+  const win=window.open("","","width=400,height=600");
   win.document.write(content);
   win.print();
 }
 
 // EXPENSE
 async function addExpense(){
-  const title = document.getElementById("etitle").value;
-  const amount = Number(document.getElementById("eamount").value);
+  const title=document.getElementById("etitle").value;
+  const amount=Number(document.getElementById("eamount").value);
 
-  if(!title || !amount) return alert("Enter expense");
+  if(!title||!amount) return alert("Enter expense");
 
   await client.from("expenses").insert([{title,amount}]);
 
