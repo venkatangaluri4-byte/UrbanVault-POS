@@ -1,4 +1,134 @@
-<!-- ONLY SCRIPT PART CHANGED — KEEP YOUR HTML/CSS SAME -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Urban Vault — POS</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<style>
+body { margin:0; font-family:'DM Sans'; background:#141a0e; color:#f0ede6; }
+nav { background:#1c2413; padding:10px 20px; display:flex; gap:12px; }
+nav a { color:#aaa; text-decoration:none; }
+nav a.active { color:#d4af37; }
+
+.layout { display:flex; }
+.left { width:65%; padding:20px; }
+.right { width:35%; background:#1c2413; padding:20px; border-left:1px solid #333; }
+
+.card { background:#232e18; padding:10px; margin-bottom:10px; border-radius:8px; }
+
+button { background:#d4af37; border:none; padding:6px 10px; cursor:pointer; border-radius:4px; }
+
+input, select {
+  width:100%; padding:8px; margin-bottom:8px;
+  background:#232e18; border:1px solid #333; color:#fff;
+}
+
+.prod-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:10px;
+}
+
+.total { font-size:22px; margin:10px 0; }
+
+#invoiceModal, #customerModal {
+  display:none;
+  position:fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  background:rgba(0,0,0,0.7);
+  justify-content:center;
+  align-items:center;
+}
+
+.modalBox {
+  background:#fff;
+  color:#000;
+  padding:20px;
+  width:340px;
+  border-radius:8px;
+}
+</style>
+</head>
+
+<body>
+
+<nav>
+  <a href="index.html">Panel</a>
+  <a href="pos.html" class="active">POS</a>
+  <a href="products.html">Productos</a>
+  <a href="sales.html">Ventas</a>
+  <a href="pl.html">Ganancias</a>
+  <a href="customers.html">Clientes</a>
+</nav>
+
+<div class="layout">
+
+<div class="left">
+<h3>Seleccionar Producto</h3>
+<input id="search" placeholder="Buscar..." oninput="renderProducts()">
+<div id="products" class="prod-grid"></div>
+</div>
+
+<div class="right">
+
+<h3>Carrito</h3>
+<div id="cart"></div>
+
+<div class="total">Total: <span id="total">$0.00</span></div>
+
+<select id="payMethod">
+<option value="efectivo">Efectivo</option>
+<option value="tarjeta">Tarjeta</option>
+<option value="transferencia">Transferencia</option>
+</select>
+
+<button onclick="handleCheckout()">Finalizar Venta</button>
+<button onclick="clearCart()">Vaciar Carrito</button>
+
+<hr>
+
+<h4>Agregar Gasto</h4>
+
+<input id="etitle" placeholder="Nombre del gasto">
+<input id="eamount" type="number" placeholder="Monto">
+
+<button onclick="addExpense()">Agregar Gasto</button>
+
+</div>
+</div>
+
+<!-- CUSTOMER -->
+<div id="customerModal">
+  <div class="modalBox">
+    <h3>Datos del Cliente</h3>
+    <input id="cname" placeholder="Nombre">
+    <input id="cphone" placeholder="Teléfono">
+    <input id="clocation" placeholder="Ubicación">
+    <input id="shipping" type="number" placeholder="Envío (opcional)">
+    <button onclick="saveCustomerData()">Continuar</button>
+    <button onclick="closeCustomer()">Cancelar</button>
+  </div>
+</div>
+
+<!-- INVOICE -->
+<div id="invoiceModal">
+  <div class="modalBox" id="invoiceBox">
+    <h3 style="text-align:center">URBAN VAULT STREETWEAR</h3>
+    <div id="invoiceMeta"></div>
+    <hr>
+    <div id="invoiceItems"></div>
+    <hr>
+    <div id="invoiceTotal"></div>
+    <button onclick="printInvoice()">Imprimir</button>
+    <button onclick="closeInvoice()">Cerrar</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="supabase.js"></script>
 
 <script>
 const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -21,27 +151,21 @@ async function load(){
 
 /* PRODUCTS */
 function renderProducts(){
-  const q=document.getElementById("search").value.toLowerCase();
+  document.getElementById("products").innerHTML=products.map(p=>{
+    const sizes=inventory
+      .filter(i=>i.product_id===p.id)
+      .map(i=>`
+        <button ${i.quantity===0?"disabled":""}
+        onclick="add('${p.id}','${p.name}','${p.color}','${i.size}',${p.selling_price})">
+        ${i.size} (${i.quantity})
+        </button>
+      `).join("");
 
-  document.getElementById("products").innerHTML=products
-    .filter(p=>p.name.toLowerCase().includes(q))
-    .map(p=>{
-
-      const sizes=inventory
-        .filter(i=>i.product_id===p.id)
-        .map(i=>`
-          <button 
-            ${i.quantity===0?"disabled":""}
-            onclick="add('${p.id}','${p.name}','${p.color}','${i.size}',${p.selling_price})">
-            ${i.size} (${i.quantity})
-          </button>
-        `).join("");
-
-      return `<div class="card">
-        <b>${p.name}</b><br>${p.color||""}<br>${money(p.selling_price)}
-        <div>${sizes}</div>
-      </div>`;
-    }).join("");
+    return `<div class="card">
+      <b>${p.name}</b><br>${p.color||""}<br>${money(p.selling_price)}
+      <div>${sizes}</div>
+    </div>`;
+  }).join("");
 }
 
 /* CART */
@@ -54,7 +178,7 @@ function add(id,name,color,size,price){
 
 function renderCart(){
   document.getElementById("cart").innerHTML=cart.map(i=>
-    `<div>${i.name} (${i.color} ${i.size}) x${i.qty}</div>`).join("");
+    `<div>${i.name} (${i.size}) x${i.qty}</div>`).join("");
 
   const total=cart.reduce((s,x)=>s+x.qty*x.price,0);
   document.getElementById("total").innerText=money(total);
@@ -62,7 +186,15 @@ function renderCart(){
 
 function clearCart(){ cart=[]; renderCart(); }
 
-/* CUSTOMER FLOW */
+/* FLOW */
+function handleCheckout(){
+  if(!customerData){
+    openCustomer();
+  } else {
+    checkout();
+  }
+}
+
 function openCustomer(){
   if(cart.length===0) return alert("Carrito vacío");
   document.getElementById("customerModal").style.display="flex";
@@ -72,69 +204,59 @@ function closeCustomer(){
   document.getElementById("customerModal").style.display="none";
 }
 
-function confirmSale(){
+function saveCustomerData(){
   customerData={
-    name:document.getElementById("cname").value,
-    phone:document.getElementById("cphone").value,
-    location:document.getElementById("clocation").value,
-    shipping:Number(document.getElementById("shipping").value||0)
+    name:cname.value,
+    phone:cphone.value,
+    location:clocation.value,
+    shipping:Number(shipping.value||0)
   };
-
   closeCustomer();
-  alert("Cliente guardado. Ahora presiona nuevamente 'Finalizar Venta'");
 }
 
-/* FINAL CHECKOUT */
+/* CHECKOUT */
 async function checkout(){
-
-  if(!customerData){
-    return alert("Primero ingresa datos del cliente");
-  }
 
   const {name,phone,location,shipping}=customerData;
 
   const productTotal=cart.reduce((s,x)=>s+x.qty*x.price,0);
   const finalTotal=productTotal+shipping;
 
-  /* SAVE CUSTOMER SAFE */
+  /* CUSTOMER SAFE SAVE */
   if(phone){
-    const {data:existing}=await client
-      .from("customers")
-      .select("id")
-      .eq("phone",phone)
-      .maybeSingle();
+    let existing=null;
+    try{
+      const res=await client.from("customers").select("id").eq("phone",phone).single();
+      existing=res.data;
+    }catch(e){}
 
     if(!existing){
       await client.from("customers").insert([{name,phone,location}]);
     }
   }
 
-  /* VALIDATE STOCK FIRST */
+  /* STOCK CHECK */
   for(const i of cart){
-    const {data:stock}=await client
-      .from("inventory")
+    const {data:stock}=await client.from("inventory")
       .select("*")
       .eq("product_id",i.id)
       .eq("size",i.size)
       .single();
 
     if(!stock || stock.quantity<i.qty){
-      return alert(`Stock insuficiente: ${i.name} (${i.size})`);
+      return alert("Stock insuficiente");
     }
   }
 
   /* CREATE SALE */
-  const {data:sale,error}=await client.from("sales").insert([{
+  const {data:sale}=await client.from("sales").insert([{
     total:productTotal,
-    payment_method:document.getElementById("payMethod").value
+    payment_method:payMethod.value
   }]).select().single();
-
-  if(error) return alert(error.message);
 
   /* REDUCE STOCK */
   for(const i of cart){
-    const {data:stock}=await client
-      .from("inventory")
+    const {data:stock}=await client.from("inventory")
       .select("*")
       .eq("product_id",i.id)
       .eq("size",i.size)
@@ -156,64 +278,39 @@ async function checkout(){
     }))
   );
 
-  /* INVOICE */
   showInvoice(cart,finalTotal,shipping,name,phone,location);
 
   cart=[];
   customerData=null;
   renderCart();
-
-  await load(); // 🔥 IMPORTANT REFRESH
+  await load();
 }
 
 /* INVOICE */
 function showInvoice(cart,total,shipping,name,phone,location){
-  const now=new Date();
-
-  document.getElementById("invoiceMeta").innerHTML=`
-    Cliente: ${name}<br>
-    Tel: ${phone}<br>
-    Ubicación: ${location}<br><br>
-    Fecha: ${now.toLocaleDateString()}
-  `;
-
-  document.getElementById("invoiceItems").innerHTML=cart.map(i=>`
-    <div style="display:flex;justify-content:space-between">
-      <div>${i.name} (${i.size}) x${i.qty}</div>
-      <div>${money(i.qty*i.price)}</div>
-    </div>
-  `).join("");
-
-  document.getElementById("invoiceTotal").innerHTML=`
-    <div>Productos: ${money(total-shipping)}</div>
-    <div>Envío: ${money(shipping)}</div>
-    <b>Total: ${money(total)}</b>
-  `;
-
-  document.getElementById("invoiceModal").style.display="flex";
+  invoiceMeta.innerHTML=`Cliente: ${name}<br>Tel: ${phone}<br>${location}`;
+  invoiceItems.innerHTML=cart.map(i=>`
+    <div>${i.name} x${i.qty} - ${money(i.qty*i.price)}</div>`).join("");
+  invoiceTotal.innerHTML=`Total: ${money(total)}`;
+  invoiceModal.style.display="flex";
 }
 
-function closeInvoice(){
-  document.getElementById("invoiceModal").style.display="none";
-}
+function closeInvoice(){ invoiceModal.style.display="none"; }
 
 function printInvoice(){
-  const content=document.getElementById("invoiceBox").innerHTML;
-  const win=window.open("","","width=400,height=600");
-  win.document.write(content);
-  win.print();
+  const w=window.open("");
+  w.document.write(invoiceBox.innerHTML);
+  w.print();
 }
 
 /* EXPENSE */
 async function addExpense(){
-  const title=document.getElementById("etitle").value;
-  const amount=Number(document.getElementById("eamount").value);
-
-  if(!title||!amount) return alert("Ingresa un gasto válido");
-
-  await client.from("expenses").insert([{title,amount}]);
+  await client.from("expenses").insert([{title:etitle.value,amount:Number(eamount.value)}]);
   alert("Gasto agregado");
 }
 
 load();
 </script>
+
+</body>
+</html>
