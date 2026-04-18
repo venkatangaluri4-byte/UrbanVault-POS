@@ -8,7 +8,6 @@
 
 <style>
 body { margin:0; font-family:'DM Sans'; background:#141a0e; color:#f0ede6; }
-
 nav { background:#1c2413; padding:10px 20px; display:flex; gap:12px; }
 nav a { color:#aaa; text-decoration:none; }
 nav a.active { color:#d4af37; }
@@ -116,7 +115,7 @@ input, select {
 
 <!-- INVOICE -->
 <div id="invoiceModal">
-  <div class="modalBox">
+  <div class="modalBox" id="invoiceBox">
 
     <div style="text-align:center;margin-bottom:10px">
       <div style="font-size:18px;font-weight:bold">URBAN VAULT STREETWEAR</div>
@@ -207,10 +206,29 @@ async function confirmSale(){
   const productTotal=cart.reduce((s,x)=>s+x.qty*x.price,0);
   const finalTotal=productTotal+shipping;
 
-  const {data:sale}=await client.from("sales").insert([{
+  /* ✅ SAVE CUSTOMER (NO DUPLICATES) */
+  if(phone){
+    const { data: existing } = await client
+      .from("customers")
+      .select("id")
+      .eq("phone", phone)
+      .single();
+
+    if(!existing){
+      await client.from("customers").insert([{
+        name,
+        phone,
+        location
+      }]);
+    }
+  }
+
+  const {data:sale,error}=await client.from("sales").insert([{
     total:productTotal,
     payment_method:document.getElementById("payMethod").value
   }]).select().single();
+
+  if(error) return alert(error.message);
 
   await client.from("sale_items").insert(
     cart.map(i=>({
